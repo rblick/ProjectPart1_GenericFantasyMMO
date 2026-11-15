@@ -1,17 +1,20 @@
 import mongoose from "mongoose";
-import crypto from "crypto";
+import crypto from "node:crypto";
+
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
     trim: true,
-    required: "Name is required",
+    required: "Username is required",
+    unique: true,
   },
   email: {
     type: String,
     trim: true,
-    unique: "Email already exists",
-    match: [/.+\@.+\..+/, "Please fill a valid email address"],
+    lowercase: true,
     required: "Email is required",
+    unique: true,
+    match: [/.+\@.+\..+/, "Please enter a valid email address"],
   },
   created: {
     type: Date,
@@ -27,17 +30,20 @@ const UserSchema = new mongoose.Schema({
   },
   salt: String,
 });
+
 UserSchema.virtual("password")
   .set(function (password) {
     this._password = password;
-    this.salt = this.makeSalt();
-    //this.hashed_password = password;
-    this.hashed_password = this.encryptPassword(password);
+    if (password) {
+      this.salt = this.makeSalt();
+      this.hashed_password = this.encryptPassword(password);
+    }
   })
   .get(function () {
     return this._password;
   });
-UserSchema.path("hashed_password").validate(function (v) {
+
+UserSchema.path("hashed_password").validate(function () {
   if (this._password && this._password.length < 6) {
     this.invalidate("password", "Password must be at least 6 characters.");
   }
@@ -45,24 +51,18 @@ UserSchema.path("hashed_password").validate(function (v) {
     this.invalidate("password", "Password is required");
   }
 }, null);
-UserSchema.methods = {
-  authenticate: function (plainText) {
-    return this.encryptPassword(plainText) === this.hashed_password;
-  },
-  encryptPassword: function (password) {
-    if (!password) return "";
-    try {
-      return crypto
-        .createHmac("sha1", this.salt)
-        .update(password)
-        .digest("hex");
-    } catch (err) {
-      return "";
-    }
-  },
-  makeSalt: function () {
-    return Math.round(new Date().valueOf() * Math.random()) + "";
-  },
+
+UserSchema.methods.makeSalt = function () {
+  return crypto.randomBytes(16).toString("hex");
+};
+
+UserSchema.methods.encryptPassword = function (password) {
+  if (!password || !this.salt) return "";
+  return crypto.scryptSync(password, this.salt, 64).toString("hex");
+};
+
+UserSchema.methods.authenticate = function (plainText) {
+  return this.encryptPassword(plainText) === this.hashed_password;
 };
 
 export default mongoose.model("User", UserSchema);
