@@ -1,8 +1,11 @@
 import User from "../models/user.model.js";
-import extend from "lodash/extend.js";
-import errorHandler from "./error.controller.js";
+import errorHandler from "../helpers/dbErrorHandler.js";
 const create = async (req, res) => {
-  const user = new User(req.body);
+  const user = new User({
+    name: req.body?.name,
+    email: req.body?.email,
+    password: req.body?.password,
+  });
   try {
     await user.save();
     return res.status(200).json({
@@ -28,13 +31,13 @@ const userByID = async (req, res, next, id) => {
   try {
     let user = await User.findById(id);
     if (!user)
-      return res.status("400").json({
+      return res.status(400).json({
         error: "User not found",
       });
     req.profile = user;
     next();
   } catch (err) {
-    return res.status("400").json({
+    return res.status(400).json({
       error: "Could not retrieve user",
     });
   }
@@ -47,7 +50,11 @@ const read = (req, res) => {
 const update = async (req, res) => {
   try {
     let user = req.profile;
-    user = extend(user, req.body);
+    for (const field of ["name", "email", "password"]) {
+      if (req.body && Object.hasOwn(req.body, field)) {
+        user[field] = req.body[field];
+      }
+    }
     user.updated = Date.now();
     await user.save();
     user.hashed_password = undefined;

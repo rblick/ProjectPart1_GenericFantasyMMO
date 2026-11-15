@@ -4,15 +4,24 @@ import { expressjwt } from "express-jwt";
 import config from "./../../config/config.js";
 const signin = async (req, res) => {
   try {
+    if (typeof req.body?.email !== "string" || typeof req.body?.password !== "string") {
+      return res.status(401).json({ error: "Email and password are required." });
+    }
     let user = await User.findOne({ email: req.body.email });
-    if (!user) return res.status("401").json({ error: "User not found" });
+    if (!user) return res.status(401).json({ error: "User not found" });
     if (!user.authenticate(req.body.password)) {
       return res
-        .status("401")
+        .status(401)
         .send({ error: "Email and password don't match." });
     }
-    const token = jwt.sign({ _id: user._id }, config.jwtSecret);
-    res.cookie("t", token, { expire: new Date() + 9999 });
+    const token = jwt.sign({ _id: user._id }, config.jwtSecret, { expiresIn: "1h" });
+    res.cookie("t", token, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 1000,
+    });
     return res.json({
       token,
       user: {
@@ -22,7 +31,7 @@ const signin = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status("401").json({ error: "Could not sign in" });
+    return res.status(401).json({ error: "Could not sign in" });
   }
 };
 const signout = (req, res) => {
@@ -39,13 +48,16 @@ const signout = (req, res) => {
 const requireSignin = expressjwt({
   secret: config.jwtSecret,
   algorithms: ["HS256"],
-  userProperty: "auth",
+  requestProperty: "auth",
 });
 
 const hasAuthorization = (req, res, next) => {
-  const authorized = req.profile && req.auth && req.profile._id == req.auth._id;
+  const authorized =
+    req.profile &&
+    req.auth &&
+    String(req.profile._id) === String(req.auth._id);
   if (!authorized) {
-    return res.status("403").json({
+    return res.status(403).json({
       error: "User is not authorized",
     });
   }
