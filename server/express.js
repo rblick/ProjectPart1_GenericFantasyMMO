@@ -20,14 +20,23 @@ app.use("/", userRoutes);
 app.use("/", authRoutes);
 app.use("/", characterCreateRoutes);
 
-// Keep the global error handler last so errors from every route reach it.
+// Handle errors after all routes.
 app.use((err, req, res, next) => {
-  if (res.headersSent) return next(err);
-  if (err.name === "UnauthorizedError") {
-    return res.status(401).json({ error: "Authentication required or token is invalid" });
+  if (res.headersSent) {
+    return next(err);
   }
-  console.error(err);
-  return res.status(400).json({ error: "The request could not be completed" });
+
+  if (err.name === "UnauthorizedError") {
+    return res.status(401).json({
+      error: "Authentication required or token invalid.",
+    });
+  }
+
+  console.error(err.message);
+
+  return res.status(400).json({
+    error: "The request could not be completed",
+  });
 });
 
 export default app;
